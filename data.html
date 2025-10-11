@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data/Reports - Doodh Hisab</title>
+    <link rel="stylesheet" href="data-styles.css">
+</head>
+<body>
+    <header>
+        <h1>📊 Data/Reports Page</h1>
+        <p>Month select karo aur table dekho. Back to main: <a href="index.html" class="back-btn">← Main Page</a></p>
+    </header>
+
+    <main>
+        <!-- Month Selector -->
+        <div class="selector-section">
+            <label for="monthSelector">Select Month:</label>
+            <input type="month" id="monthSelector">
+            <button id="loadDataBtn">Load Data</button>
+        </div>
+
+        <!-- Table Section -->
+        <div id="tableSection" style="display: none;">
+            <h2 id="monthTitle">Month Data</h2>
+            <table id="dataTable">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Shift</th>
+                        <th>Money (₹)</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <!-- Rows yahan load hongi -->
+                </tbody>
+            </table>
+            <div id="totalSection" class="total">
+                <!-- Total yahan dikhega -->
+            </div>
+        </div>
+
+        <!-- No Data Message -->
+        <div id="noDataMsg" class="no-data" style="display: none;">
+            <p>इस month में कोई entries नहीं हैं।</p>
+        </div>
+    </main>
+
+    <!-- Firebase SDK & Config -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="config.js"></script>
+    <script src="data-app.js"></script>
+</body>
+</html>

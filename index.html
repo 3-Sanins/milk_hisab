@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doodh Hisab App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>दूध का हिसाब</h1>
+    <div class="tips">
+        <strong>Tips:</strong><br>
+        - Voice: Clear Hindi mein bolo (e.g., "26 may ki shaam ko 126.56 ka doodh hua").<br>
+        - Manual: Form bharein aur save karein.<br>
+        - Existing entry pe warning aayega overwrite ke liye.<br>
+        - Chrome use karo for voice.
+    </div>
+    
+    <!-- Voice Section -->
+    <h2>Voice Input</h2>
+    <button id="voiceBtn">🎤 शुरू करो (Start Listening)</button>
+    <button id="stopBtn">⏹️ रोक दो (Stop)</button>
+    <div id="output">यहाँ रिजल्ट दिखेगा...</div>
+    <div id="parsedData">
+        <h3>Parsed Data (Confirm karo)</h3>
+        <p id="parsedDate"></p>
+        <p id="parsedShift"></p>
+        <p id="parsedAmount"></p>
+        <button id="saveBtn">💾 Save to Database</button>
+    </div>
+
+    <!-- Manual Input Section -->
+    <h2>Manual Input</h2>
+    <div id="manualForm">
+        <label for="manualDate">Date:</label>
+        <input type="date" id="manualDate" required>
+        
+        <label for="manualShift">Shift:</label>
+        <select id="manualShift" required>
+            <option value="">Select Shift</option>
+            <option value="morning">Subah (Morning)</option>
+            <option value="evening">Shaam (Evening)</option>
+        </select>
+        
+        <label for="manualAmount">Amount (e.g., 126.56):</label>
+        <input type="number" step="0.01" id="manualAmount" placeholder="Amount enter karo" required>
+        
+        <button id="manualSaveBtn">💾 Manual Save</button>
+    </div>
+
+    <div id="entries">
+        <h2>पिछले Entries:</h2>
+        <!-- Entries यहाँ load होंगी -->
+    </div>
+
+    <!-- New: Show Data Button (Navigate to Second Page) -->
+    <div style="text-align: center; margin: 20px 0;">
+        <a href="data.html" class="show-data-btn">📊 Show Data</a>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
