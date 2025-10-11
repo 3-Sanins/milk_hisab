@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadEntries(); // Initial load entries
 });
 
-// Voice Recognition Setup
+// Voice Recognition Setup (Fixed: No Repetition)
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const output = document.getElementById('output');
 const parsedDataDiv = document.getElementById('parsedData');
@@ -17,32 +17,34 @@ if (!SpeechRecognition) {
     output.innerHTML = '<p class="error">Sorry, browser voice recognition support nahi karta. Chrome update karo!</p>';
 } else {
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-IN'; // Better for Hinglish; agar pure Hindi chahiye to 'hi-IN' kar do
-    recognition.continuous = true;
-    recognition.interimResults = true;
+    recognition.lang = 'en-IN'; // Hinglish for better accuracy; 'hi-IN' for pure Hindi
+    recognition.continuous = false; // FIXED: Off - no looping, one utterance only
+    recognition.interimResults = true; // Partial show, but final only save
     recognition.maxAlternatives = 1;
 
     let finalTranscript = '';
+    let previousTranscript = ''; // For de-dupe
     const voiceBtn = document.getElementById('voiceBtn');
     const stopBtn = document.getElementById('stopBtn');
 
     voiceBtn.addEventListener('click', () => {
-        finalTranscript = '';
+        finalTranscript = ''; // FIXED: Always reset on start
+        previousTranscript = '';
         recognition.start();
         voiceBtn.style.display = 'none';
         stopBtn.style.display = 'inline-block';
-        output.innerHTML = '<p>🎤 सुन रहा हूँ... Clear aur slow bolo: "26 may ki shaam ko 126 point 56 ka doodh hua". Stop dabaao!</p>';
+        output.innerHTML = '<p>🎤 सुन रहा हूँ... Clear aur slow bolo (e.g., "26 may ki shaam ko 126 point 56 ka doodh"). Auto-stop ho jaayega jab rukoge. No repetition!</p>';
         parsedDataDiv.style.display = 'none';
         saveBtn.style.display = 'none';
-        console.log('Voice recognition started'); // Debug
+        console.log('Voice started - transcript reset'); // Debug
     });
 
     stopBtn.addEventListener('click', () => {
         recognition.stop();
         voiceBtn.style.display = 'inline-block';
         stopBtn.style.display = 'none';
-        output.innerHTML += '<p>Stopped! Parsing...</p>';
-        console.log('Manual stop, transcript:', finalTranscript); // Debug
+        output.innerHTML += '<p>Manual stop! Parsing...</p>';
+        console.log('Manual stop, final transcript:', finalTranscript); // Debug
         if (finalTranscript.trim()) {
             parseAndDisplay(finalTranscript);
         }
@@ -52,22 +54,32 @@ if (!SpeechRecognition) {
         let interimTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
-                finalTranscript += event.results[i][0].transcript;
+                const newPart = event.results[i][0].transcript;
+                // FIXED: De-dupe - check if repetitive (last 10 chars match previous)
+                if (newPart.slice(-10) !== previousTranscript.slice(-10)) {
+                    finalTranscript += newPart;
+                    previousTranscript = finalTranscript;
+                    console.log('Added to final:', newPart); // Debug
+                } else {
+                    console.log('Skipped duplicate part'); // Debug
+                }
             } else {
                 interimTranscript += event.results[i][0].transcript;
             }
         }
         output.innerHTML = `<p><strong>Final:</strong> ${finalTranscript}</p><p class="interim"><strong>Partial:</strong> ${interimTranscript}</p>`;
-        console.log('Current transcript:', finalTranscript); // Debug real-time
+        console.log('Current final transcript:', finalTranscript); // Debug
     };
 
     recognition.onend = () => {
         voiceBtn.style.display = 'inline-block';
         stopBtn.style.display = 'none';
-        console.log('Recognition ended, transcript:', finalTranscript); // Debug
+        console.log('Recognition ended, final transcript:', finalTranscript); // Debug
         if (finalTranscript.trim() && finalTranscript !== '') {
-            output.innerHTML += '<p>Auto-parsing...</p>';
+            output.innerHTML += '<p>Auto-stopped! Parsing...</p>';
             parseAndDisplay(finalTranscript);
+        } else {
+            output.innerHTML += '<p class="error">Kuch capture nahi hua. Dobara try karo!</p>';
         }
     };
 
@@ -76,18 +88,19 @@ if (!SpeechRecognition) {
         silenceTimer = setTimeout(() => {
             if (recognition) {
                 recognition.stop();
-                output.innerHTML += '<p>10 sec silence - auto stopped.</p>';
+                output.innerHTML += '<p>5 sec silence - auto stopped (no repetition).</p>';
             }
-        }, 10000); // 10 sec silence
+        }, 5000); // FIXED: Reduced to 5 sec for quicker end
         console.log('Listening started'); // Debug
     };
 
     recognition.onerror = (event) => {
         clearTimeout(silenceTimer);
         let errorMsg = 'Voice Error: ';
-        if (event.error === 'no-speech') errorMsg += 'Kuch bola nahi. Mic check karo aur dobara try!';
-        else if (event.error === 'audio-capture') errorMsg += 'Mic capture fail. Permission ya hardware check karo!';
-        else if (event.error === 'not-allowed') errorMsg += 'Mic permission deny. Browser settings mein allow karo!';
+        if (event.error === 'no-speech') errorMsg += 'Kuch bola nahi. Clear bolo aur dobara try!';
+        else if (event.error === 'audio-capture') errorMsg += 'Mic capture fail (repetition possible). Permission/hardware check karo!';
+        else if (event.error === 'not-allowed') errorMsg += 'Mic permission deny. Browser settings allow karo!';
+        else if (event.error === 'aborted') errorMsg += 'Session aborted (repetition avoid). Dobara start karo!';
         else if (event.error === 'network') errorMsg += 'Internet issue. Online raho!';
         else errorMsg += event.error;
         output.innerHTML = `<p class="error">${errorMsg}</p>`;
@@ -97,16 +110,16 @@ if (!SpeechRecognition) {
     };
 }
 
-// Improved Parse and Display (Better Regex + Handling)
+// Parse and Display (same as before, no change needed)
 function parseAndDisplay(transcript) {
     const fullTranscript = transcript.toLowerCase().trim();
-    console.log('Parsing transcript:', fullTranscript); // Debug: Full text console mein
+    console.log('Parsing transcript:', fullTranscript); // Debug
     output.innerHTML += `<p><strong>Full बोला गया:</strong> ${fullTranscript}</p>`;
 
-    // Improved Date Regex: Handle DD month, aaj/kal, year
+    // Improved Date Regex (same)
     let date = null;
     const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]; // +1 day
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
     if (fullTranscript.includes('aaj') || fullTranscript.includes('आज')) {
         date = today;
     } else if (fullTranscript.includes('kal') || fullTranscript.includes('कल')) {
@@ -123,16 +136,14 @@ function parseAndDisplay(transcript) {
                 'nov': 11, 'november': 11, 'dec': 12, 'december': 12
             };
             const month = months[monthStr];
-            // Year handle (if spoken, e.g., "2024 26 may")
-            const yearMatch = fullTranscript.match(/(\d{4})\s*(\d{1,2})\s*(jan|...)/i); // Simplified
-            const year = yearMatch ? parseInt(yearMatch[1]) : new Date().getFullYear();
             if (month && day > 0 && day <= 31) {
+                const year = new Date().getFullYear();
                 date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             }
         }
     }
 
-    // Improved Shift Regex
+    // Improved Shift Regex (same)
     let shift = null;
     const shiftMatch = fullTranscript.match(/(subah|सुबह|morning|shaam|शाम|evening)/i);
     if (shiftMatch) {
@@ -140,24 +151,23 @@ function parseAndDisplay(transcript) {
         shift = (shiftWord.includes('shaam') || shiftWord.includes('evening') || shiftWord.includes('शाम')) ? 'evening' : 'morning';
     }
 
-    // Improved Amount Regex: Handle "point" for decimal, numbers
+    // Improved Amount Regex (same)
     let amount = 0;
     let amountStr = null;
     const amountMatch = fullTranscript.match(/(\d+(?:\s*point\s*\d+)?|\d+(?:[.,]\d+)?)\s*(ka|का|litre|liter|kg|doodh|दूध)/i);
     if (amountMatch) {
-        amountStr = amountMatch[1].replace(/point/g, '.').replace(',', '.'); // "126 point 56" -> "126.56"
+        amountStr = amountMatch[1].replace(/point/g, '.').replace(',', '.');
         amount = parseFloat(amountStr);
     }
-    console.log('Parsed - Date:', date, 'Shift:', shift, 'Amount:', amount); // Debug: Parsed values
+    console.log('Parsed - Date:', date, 'Shift:', shift, 'Amount:', amount); // Debug
 
-    // Strict Check
+    // Strict Check (same)
     let missing = [];
     if (!date) missing.push('Date (e.g., "26 may" ya "aaj")');
     if (!shift) missing.push('Shift (subah/shaam)');
     if (amount <= 0) missing.push('Amount (e.g., "126 point 56 ka doodh")');
 
     if (missing.length === 0) {
-        // Display in big font
         currentParsed = { date, shift, amount };
         document.getElementById('parsedDate').innerHTML = `📅 Date: ${date}`;
         document.getElementById('parsedShift').innerHTML = `⏰ Shift: ${shift === 'morning' ? 'Subah' : 'Shaam'}`;
@@ -165,11 +175,11 @@ function parseAndDisplay(transcript) {
         parsedDataDiv.style.display = 'block';
         saveBtn.style.display = 'block';
         output.innerHTML += '<p class="success">✅ Parsed successfully! Save karo.</p>';
-        console.log('Parse success!'); // Debug
+        console.log('Parse success!');
     } else {
-        const errorMsg = `❌ Saari info nahi mili: ${missing.join(', ')}. Dobara clear bolo! Better Example: "Aaj shaam ko 126 point 56 ka doodh hua" ya "26 may ki subah ko one fifty ka doodh"`;
+        const errorMsg = `❌ Saari info nahi mili: ${missing.join(', ')}. Dobara clear bolo! Example: "Aaj shaam ko 126 point 56 ka doodh hua"`;
         output.innerHTML += `<p class="error">${errorMsg}</p>`;
-        console.log('Parse fail, missing:', missing); // Debug
+        console.log('Parse fail, missing:', missing);
     }
 }
 
@@ -212,7 +222,7 @@ function saveToFirebase(date, shift, amount, isManual = false) {
     });
 }
 
-// Voice Save Button Event
+// Voice Save Button Event (same)
 saveBtn.addEventListener('click', () => {
     if (currentParsed.date && currentParsed.shift && currentParsed.amount > 0) {
         saveToFirebase(currentParsed.date, currentParsed.shift, currentParsed.amount);
@@ -239,7 +249,7 @@ document.getElementById('manualSaveBtn').addEventListener('click', () => {
     document.getElementById('manualAmount').value = '';
 });
 
-// Load Entries (same as before)
+// Load Entries (same)
 function loadEntries() {
     const entriesDiv = document.getElementById('entries');
     db.ref('milk-entries').on('value', (snapshot) => {
