@@ -7,116 +7,147 @@ document.addEventListener('DOMContentLoaded', function() {
     loadEntries(); // Initial load entries
 });
 
-// Voice Recognition Setup (Fixed: No Repetition)
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+// Voice Recognition Setup (Fixed: Proper stop/reset, no "already started" error)
 const output = document.getElementById('output');
 const parsedDataDiv = document.getElementById('parsedData');
 const saveBtn = document.getElementById('saveBtn');
 
-if (!SpeechRecognition) {
-    output.innerHTML = '<p class="error">Sorry, browser voice recognition support nahi karta. Chrome update karo!</p>';
-} else {
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-IN'; // Hinglish for better accuracy; 'hi-IN' for pure Hindi
-    recognition.continuous = false; // FIXED: Off - no looping, one utterance only
-    recognition.interimResults = true; // Partial show, but final only save
-    recognition.maxAlternatives = 1;
+let recognition; // Will be recreated each time
 
-    let finalTranscript = '';
-    let previousTranscript = ''; // For de-dupe
-    const voiceBtn = document.getElementById('voiceBtn');
-    const stopBtn = document.getElementById('stopBtn');
+function createRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        output.innerHTML = '<p class="error">Sorry, browser voice recognition support nahi karta. Chrome update karo!</p>';
+        return null;
+    }
+    const newRecog = new SpeechRecognition();
+    newRecog.lang = 'hi-IN'; // Pure Hindi
+    newRecog.continuous = false; // Single utterance
+    newRecog.interimResults = false; // Only final
+    newRecog.maxAlternatives = 1;
+    console.log('New recognition object created'); // Debug
+    return newRecog;
+}
 
-    voiceBtn.addEventListener('click', () => {
-        finalTranscript = ''; // FIXED: Always reset on start
-        previousTranscript = '';
-        recognition.start();
+const voiceBtn = document.getElementById('voiceBtn');
+const stopBtn = document.getElementById('stopBtn');
+
+voiceBtn.addEventListener('click', () => {
+    // FIXED: Stop any existing session first
+    if (recognition) {
+        try {
+            if (recognition.running) { // Check if running (non-standard, but works in Chrome)
+                recognition.abort(); // Force abort to clear state
+                console.log('Aborting previous session'); // Debug
+            }
+        } catch (e) {
+            console.log('Previous session already ended'); // Debug
+        }
+    }
+
+    // FIXED: Create fresh recognition each time
+    recognition = createRecognition();
+    if (!recognition) return;
+
+    let finalTranscript = ''; // Local per session
+    let silenceTimer;
+
+    // Event handlers (re-attach fresh)
+    recognition.onstart = () => {
+        finalTranscript = ''; // Reset
         voiceBtn.style.display = 'none';
         stopBtn.style.display = 'inline-block';
-        output.innerHTML = '<p>🎤 सुन रहा हूँ... Clear aur slow bolo (e.g., "26 may ki shaam ko 126 point 56 ka doodh"). Auto-stop ho jaayega jab rukoge. No repetition!</p>';
+        output.innerHTML = '<p>🎤 सुन रहा हूँ... Clear aur slow bolo (5-7 sec). Auto-stop ho jaayega. Example: "26 may ki shaam ko 126 point 56 ka doodh hua".</p>';
         parsedDataDiv.style.display = 'none';
         saveBtn.style.display = 'none';
-        console.log('Voice started - transcript reset'); // Debug
-    });
-
-    stopBtn.addEventListener('click', () => {
-        recognition.stop();
-        voiceBtn.style.display = 'inline-block';
-        stopBtn.style.display = 'none';
-        output.innerHTML += '<p>Manual stop! Parsing...</p>';
-        console.log('Manual stop, final transcript:', finalTranscript); // Debug
-        if (finalTranscript.trim()) {
-            parseAndDisplay(finalTranscript);
-        }
-    });
+        console.log('Fresh recognition started'); // Debug
+    };
 
     recognition.onresult = (event) => {
-        let interimTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            if (event.results[i].isFinal) {
-                const newPart = event.results[i][0].transcript;
-                // FIXED: De-dupe - check if repetitive (last 10 chars match previous)
-                if (newPart.slice(-10) !== previousTranscript.slice(-10)) {
-                    finalTranscript += newPart;
-                    previousTranscript = finalTranscript;
-                    console.log('Added to final:', newPart); // Debug
-                } else {
-                    console.log('Skipped duplicate part'); // Debug
-                }
-            } else {
-                interimTranscript += event.results[i][0].transcript;
-            }
-        }
-        output.innerHTML = `<p><strong>Final:</strong> ${finalTranscript}</p><p class="interim"><strong>Partial:</strong> ${interimTranscript}</p>`;
-        console.log('Current final transcript:', finalTranscript); // Debug
+        finalTranscript = event.results[0][0].transcript; // Only final
+        output.innerHTML = `<p><strong>बोला गया:</strong> ${finalTranscript}</p>`;
+        console.log('Result received - transcript:', finalTranscript); // Debug
     };
 
     recognition.onend = () => {
+        clearTimeout(silenceTimer);
         voiceBtn.style.display = 'inline-block';
         stopBtn.style.display = 'none';
-        console.log('Recognition ended, final transcript:', finalTranscript); // Debug
-        if (finalTranscript.trim() && finalTranscript !== '') {
-            output.innerHTML += '<p>Auto-stopped! Parsing...</p>';
+        console.log('Recognition ended - parsing:', finalTranscript ? 'Yes' : 'No transcript'); // Debug
+        if (finalTranscript.trim()) {
+            output.innerHTML += '<p>Stopped! Parsing...</p>';
             parseAndDisplay(finalTranscript);
         } else {
-            output.innerHTML += '<p class="error">Kuch capture nahi hua. Dobara try karo!</p>';
+            output.innerHTML += '<p class="error">Kuch capture nahi hua. Mic check karo aur dobara try!</p>';
         }
-    };
-
-    let silenceTimer;
-    recognition.onstart = () => {
-        silenceTimer = setTimeout(() => {
-            if (recognition) {
-                recognition.stop();
-                output.innerHTML += '<p>5 sec silence - auto stopped (no repetition).</p>';
-            }
-        }, 5000); // FIXED: Reduced to 5 sec for quicker end
-        console.log('Listening started'); // Debug
+        // FIXED: Cleanup - set to null after end
+        recognition = null;
     };
 
     recognition.onerror = (event) => {
         clearTimeout(silenceTimer);
         let errorMsg = 'Voice Error: ';
-        if (event.error === 'no-speech') errorMsg += 'Kuch bola nahi. Clear bolo aur dobara try!';
-        else if (event.error === 'audio-capture') errorMsg += 'Mic capture fail (repetition possible). Permission/hardware check karo!';
-        else if (event.error === 'not-allowed') errorMsg += 'Mic permission deny. Browser settings allow karo!';
-        else if (event.error === 'aborted') errorMsg += 'Session aborted (repetition avoid). Dobara start karo!';
-        else if (event.error === 'network') errorMsg += 'Internet issue. Online raho!';
-        else errorMsg += event.error;
+        if (event.error === 'no-speech') {
+            errorMsg += 'Kuch bola nahi. Dobara bolo!';
+        } else if (event.error === 'audio-capture') {
+            errorMsg += 'Mic fail. Permission/hardware check!';
+        } else if (event.error === 'not-allowed') {
+            errorMsg += 'Mic permission deny. Allow karo!';
+        } else if (event.error === 'aborted') {
+            errorMsg += 'Session aborted. Dobara start!';
+        } else if (event.error === 'network') {
+            errorMsg += 'Internet issue!';
+        } else {
+            // FIXED: Handle "already started" specifically
+            if (event.error.includes('already') || event.message.includes('started')) {
+                errorMsg += 'Previous session stuck. Page reload karo ya dobara try!';
+                recognition = null; // Reset
+            } else {
+                errorMsg += event.error;
+            }
+        }
         output.innerHTML = `<p class="error">${errorMsg}</p>`;
-        console.error('Recognition error:', event.error); // Debug
+        console.error('Error details:', event); // Debug
         voiceBtn.style.display = 'inline-block';
         stopBtn.style.display = 'none';
+        recognition = null; // FIXED: Reset on error
     };
-}
 
-// Parse and Display (same as before, no change needed)
+    // Silence timer
+    silenceTimer = setTimeout(() => {
+        if (recognition) {
+            recognition.abort(); // Force end
+            console.log('Silence timer - aborted'); // Debug
+        }
+    }, 7000);
+
+    // Start the fresh recognition
+    try {
+        recognition.start();
+        console.log('recognition.start() called successfully'); // Debug
+    } catch (e) {
+        console.error('Start failed:', e);
+        output.innerHTML += '<p class="error">Start error: ' + e.message + '. Page reload karo!</p>';
+        recognition = null;
+    }
+});
+
+stopBtn.addEventListener('click', () => {
+    if (recognition) {
+        recognition.abort(); // Force stop
+        console.log('Manual abort called'); // Debug
+    }
+    voiceBtn.style.display = 'inline-block';
+    stopBtn.style.display = 'none';
+    output.innerHTML += '<p>Manual stop! Parsing if captured.</p>';
+});
+
+// Parse and Display (same as before - no change)
 function parseAndDisplay(transcript) {
     const fullTranscript = transcript.toLowerCase().trim();
-    console.log('Parsing transcript:', fullTranscript); // Debug
+    console.log('Parsing started - full transcript:', fullTranscript); // Debug
     output.innerHTML += `<p><strong>Full बोला गया:</strong> ${fullTranscript}</p>`;
 
-    // Improved Date Regex (same)
     let date = null;
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
@@ -143,7 +174,6 @@ function parseAndDisplay(transcript) {
         }
     }
 
-    // Improved Shift Regex (same)
     let shift = null;
     const shiftMatch = fullTranscript.match(/(subah|सुबह|morning|shaam|शाम|evening)/i);
     if (shiftMatch) {
@@ -151,17 +181,14 @@ function parseAndDisplay(transcript) {
         shift = (shiftWord.includes('shaam') || shiftWord.includes('evening') || shiftWord.includes('शाम')) ? 'evening' : 'morning';
     }
 
-    // Improved Amount Regex (same)
     let amount = 0;
-    let amountStr = null;
     const amountMatch = fullTranscript.match(/(\d+(?:\s*point\s*\d+)?|\d+(?:[.,]\d+)?)\s*(ka|का|litre|liter|kg|doodh|दूध)/i);
     if (amountMatch) {
-        amountStr = amountMatch[1].replace(/point/g, '.').replace(',', '.');
+        const amountStr = amountMatch[1].replace(/point/g, '.').replace(',', '.');
         amount = parseFloat(amountStr);
     }
-    console.log('Parsed - Date:', date, 'Shift:', shift, 'Amount:', amount); // Debug
+    console.log('Parsed values - Date:', date, 'Shift:', shift, 'Amount:', amount); // Debug
 
-    // Strict Check (same)
     let missing = [];
     if (!date) missing.push('Date (e.g., "26 may" ya "aaj")');
     if (!shift) missing.push('Shift (subah/shaam)');
@@ -175,11 +202,11 @@ function parseAndDisplay(transcript) {
         parsedDataDiv.style.display = 'block';
         saveBtn.style.display = 'block';
         output.innerHTML += '<p class="success">✅ Parsed successfully! Save karo.</p>';
-        console.log('Parse success!');
+        console.log('Parse success - data ready'); // Debug
     } else {
-        const errorMsg = `❌ Saari info nahi mili: ${missing.join(', ')}. Dobara clear bolo! Example: "Aaj shaam ko 126 point 56 ka doodh hua"`;
+        const errorMsg = `❌ Saari info nahi mili: ${missing.join(', ')}. Dobara clear bolo! Example: "26 may ki shaam ko 126 point 56 ka doodh hua"`;
         output.innerHTML += `<p class="error">${errorMsg}</p>`;
-        console.log('Parse fail, missing:', missing);
+        console.log('Parse fail - missing:', missing); // Debug
     }
 }
 
