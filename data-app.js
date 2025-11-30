@@ -30,7 +30,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const [year, month] = selectedMonth.split('-');
     const startDate = `${year}-${month}-01`;
-    const endDate = new Date(year, month, 0).toISOString().split('T')[0]; // Last day of month
+    const endDateObj = new Date(year, parseInt(month), 0);
+const endDate = `${year}-${month}-${String(endDateObj.getDate()).padStart(2, '0')}`;
 
     monthTitle.innerHTML = `${monthNames[parseInt(month) - 1]} ${year} का Data`;
 
